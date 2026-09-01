@@ -38,7 +38,7 @@ def split_by_chunk_size(text: str, chunk_size: int = 300, overlap: int = 50) -> 
 # ============================================================
 # 2. 嵌入模型（文本 → 向量）
 # ============================================================
-embedding_model = SentenceTransformer("../text2vec-base-chinese")
+embedding_model = SentenceTransformer("./text2vec-base-chinese")
 
 def embed_chunk(chunk: str) -> List[float]:
     """把单个文本块转成向量。"""
@@ -106,7 +106,7 @@ def retrieve(queries: List[str], top_k: int) -> List[List[str]]:
 # ============================================================
 # 5. 重排序（精排）
 # ============================================================
-cross_encoder = CrossEncoder('../mmarco-mMiniLMv2-L12-H384-v1')
+cross_encoder = CrossEncoder('./mmarco-mMiniLMv2-L12-H384-v1')
 
 def rerank(queries: List[str], retrieved_results: List[List[str]], top_k: int) -> List[List[str]]:
     """对每个问题及其候选块重排序，返回每个问题最相关的 top_k 个文本块。"""
