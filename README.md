@@ -9,8 +9,6 @@
 | [`ver 1.0`](<ver 1.0/README.md>) | 手写 RAG 管道 | 不依赖任何 RAG 框架，用 PyMuPDF / sentence-transformers / ChromaDB / OpenAI SDK 逐环节手写，**便于理解 RAG 原理** |
 | [`ver 2.0 ( LangChain优化)`](<ver 2.0 ( LangChain优化)/README.md>) | LangChain 重构版 | 用 **LangChain 1.x 官方组件** 重写同一套管道（嵌入 / 向量库 / 检索 / 精排 / LCEL 生成），代码更简洁，接口与 ver 1.0 完全一致 |
 
-> 💡 版本目录内代码注释中出现的 `ver3.0` / `ver4.0` 等编号为迭代过程中的历史命名，仓库中请以顶层目录 `ver 1.0` / `ver 2.0` 为准。
-
 ---
 
 ## ✨ 功能特性
@@ -164,28 +162,3 @@ chunks_preview.md                     # 分块预览（自动生成，便于人�
 - **精排保留数量**：ver 1.0 `rerank(..., top_k=5)`；ver 2.0 `make_retriever(store, ..., top_n=5)`
 
 ---
-
-## ⚠️ 上传 GitHub 前的注意事项
-
-1. **切勿提交密钥与大数据文件**。`.env` 含 DeepSeek API Key，务必排除；两个本地模型（合计约 1 GB+）、`chroma_db/`、`doc.pdf`、`chunks_preview.md`、`__pycache__/` 均不应入库。建议在仓库根目录添加 `.gitignore`：
-
-   ```gitignore
-   .env
-   __pycache__/
-   *.pyc
-   text2vec-base-chinese/
-   mmarco-mMiniLMv2-L12-H384-v1/
-   **/chroma_db/
-   *.pdf
-   chunks_preview.md
-   ```
-
-2. **目录名含空格与括号**（如 `ver 2.0 ( LangChain优化)`）：Git / GitHub 支持，但命令行操作需加引号；部分脚本与 CI 工具可能不便，介意的话可重命名目录（代码内路径均为相对引用，重命名不影响运行，仅需同步各目录 README 中的路径说明）。
-
-3. **开源许可**：仓库目前未包含 LICENSE 文件。公开前建议明确许可协议（如 MIT / Apache-2.0），并补一个 LICENSE 文件。
-
----
-
-## 📄 License
-
-本仓库暂未指定开源许可协议，仅供学习交流使用。作者保留所有权利。
