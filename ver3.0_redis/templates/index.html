@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的PDF阅读助手 (ver3.0_redis 缓存版)</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 0 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 60px;
+            font-size: 16px;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin-top: 10px;
+            cursor: pointer;
+        }
+        .answer {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            white-space: pre-wrap;
+        }
+        .sources {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #555;
+        }
+        .source-item {
+            padding: 8px;
+            border-left: 3px solid #ccc;
+            margin-bottom: 5px;
+            background: #fafafa;
+        }
+        .badge {
+            display: inline-block;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+        .badge.hit  { background: #d4f5d4; color: #1a6b1a; }
+        .badge.miss { background: #ffe6cc; color: #8a4b00; }
+        .stats {
+            margin-top: 30px;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 13px;
+            background: #fcfcfc;
+        }
+        .stats table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+        .stats td, .stats th { border-bottom: 1px solid #eee; padding: 4px 6px; text-align: left; }
+        .muted { color: #888; }
+    </style>
+</head>
+<body>
+    <h1>📚 我的 RAG 助手 <span class="muted" style="font-size:14px;">ver3.0_redis · 缓存</span></h1>
+
+    <div style="margin-bottom: 25px; padding: 15px; border: 2px dashed #aaa; border-radius: 8px;">
+        <h3 style="margin-top: 0;">📤 上传文档（PDF / Markdown）</h3>
+        <input type="file" id="fileInput" accept=".pdf,.md,.markdown,.txt" onchange="onFileSelected()">
+        <button id="uploadBtn" onclick="uploadFile()" disabled style="margin-left: 10px;">上传并向量化</button>
+        <div id="uploadStatus" style="margin-top: 10px; font-size: 14px;"></div>
+    </div>
+
+    <hr>
+
+    <h3>❓ 提问</h3>
+    <textarea id="query" placeholder="输入你的问题"></textarea>
+    <br>
+    <button onclick="askQuestion()">提问</button>
+    <label style="margin-left: 15px; font-size: 14px; color: #555;">
+        <input type="checkbox" id="forceFresh"> 跳过缓存（强制重新生成）
+    </label>
+    <div class="muted" style="font-size:12px; margin-top:6px;">
+        勾选后走完整链路（召回 → 精排 → DeepSeek），可用于对比“命中缓存”与“真实计算”的耗时。
+    </div>
+
+    <div id="answer" class="answer" style="display:none;"></div>
+    <div id="sources" class="sources" style="display:none;"></div>
+
+    <div class="stats">
+        <strong>📊 缓存状态</strong>
+        <button onclick="loadStats()" style="padding:3px 10px; font-size:12px; margin-left:8px;">刷新</button>
+        <button onclick="clearCache()" style="padding:3px 10px; font-size:12px;">清空缓存</button>
+        <div id="statsBody" class="muted" style="margin-top:8px;">加载中...</div>
+    </div>
+
+    <script>
+        let selectedFile = null;
+
+        function onFileSelected() {
+            const input = document.getElementById('fileInput');
+            selectedFile = input.files[0] || null;
+            document.getElementById('uploadBtn').disabled = !selectedFile;
+        }
+
+        async function uploadFile() {
+            if (!selectedFile) return;
+            const status = document.getElementById('uploadStatus');
+            const btn = document.getElementById('uploadBtn');
+            status.textContent = '⏳ 上传中，请稍候...';
+            status.style.color = '#555';
+            btn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            try {
+                const response = await fetch('/upload', { method: 'POST', body: formData });
+                const data = await response.json();
+                if (data.success) {
+                    status.textContent = '✅ ' + data.message;
+                    status.style.color = 'green';
+                    loadStats();          // 上传会失效缓存，刷新一下统计
+                } else {
+                    status.textContent = '❌ ' + data.message;
+                    status.style.color = 'red';
+                }
+            } catch (err) {
+                status.textContent = '❌ 请求失败: ' + err.message;
+                status.style.color = 'red';
+            } finally {
+                btn.disabled = false;
+                selectedFile = null;
+                document.getElementById('fileInput').value = '';
+            }
+        }
+
+        async function askQuestion() {
+            const query = document.getElementById('query').value.trim();
+            if (!query) { alert('请输入问题'); return; }
+
+            const useCache = !document.getElementById('forceFresh').checked;
+            const answerDiv = document.getElementById('answer');
+            answerDiv.style.display = 'block';
+            answerDiv.textContent = '⏳ 思考中...';
+
+            try {
+                const response = await fetch('/ask', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query, use_cache: useCache })
+                });
+                const data = await response.json();
+
+                // 用徽标直观区分“缓存命中”和“真实计算”
+                const badge = data.cache_hit
+                    ? `<span class="badge hit">缓存命中 · ${data.cache_type} · ${data.elapsed_ms}ms</span>`
+                    : `<span class="badge miss">真实计算 · ${data.elapsed_ms}ms</span>`;
+                answerDiv.innerHTML = badge + '\n' + escapeHtml(data.answer);
+
+                const sourcesDiv = document.getElementById('sources');
+                sourcesDiv.style.display = 'block';
+                sourcesDiv.innerHTML = '<h3>引用来源：</h3>';
+                (data.sources || []).forEach((s, i) => {
+                    const item = document.createElement('div');
+                    item.className = 'source-item';
+                    item.textContent = `[${i + 1}] ${s}`;
+                    sourcesDiv.appendChild(item);
+                });
+
+                loadStats();
+            } catch (err) {
+                answerDiv.textContent = '❌ 请求失败: ' + err.message;
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function loadStats() {
+            const body = document.getElementById('statsBody');
+            try {
+                const res = await fetch('/cache/stats');
+                const d = await res.json();
+                const s = d.stats;
+                const qaTotal = s.qa_hit + s.qa_miss;
+                body.innerHTML = `
+                    <div>后端：<b>${d.backend}</b>（健康：${d.healthy ? '✅' : '❌'}）
+                         　缓存版本：<b>v${d.version}</b></div>
+                    <table>
+                        <tr><th>缓存类型</th><th>命中</th><th>未命中</th><th>命中率</th></tr>
+                        <tr><td>问答缓存</td><td>${s.qa_hit}</td><td>${s.qa_miss}</td>
+                            <td>${qaTotal ? (s.qa_hit_rate * 100).toFixed(1) + '%' : '-'}</td></tr>
+                        <tr><td>向量缓存</td><td>${s.embed_hit}</td><td>${s.embed_miss}</td>
+                            <td>${(s.embed_hit + s.embed_miss) ? (s.embed_hit_rate * 100).toFixed(1) + '%' : '-'}</td></tr>
+                        <tr><td>精排分数缓存</td><td>${s.rerank_hit}</td><td>${s.rerank_miss}</td>
+                            <td>${(s.rerank_hit + s.rerank_miss) ? (s.rerank_hit_rate * 100).toFixed(1) + '%' : '-'}</td></tr>
+                    </table>
+                    <div class="muted" style="margin-top:6px;">
+                        TTL：问答 ${d.ttl_seconds.answer}s / 向量 ${d.ttl_seconds.embedding}s / 精排 ${d.ttl_seconds.rerank}s；
+                        已省下 ${s.asked_pipeline_saved} 次 DeepSeek 调用。
+                    </div>`;
+            } catch (err) {
+                body.textContent = '获取缓存状态失败: ' + err.message;
+            }
+        }
+
+        async function clearCache() {
+            if (!confirm('确定清空全部缓存？（答案会重新生成，命中统计归零）')) return;
+            await fetch('/cache/clear', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+            loadStats();
+        }
+
+        loadStats();
+    </script>
+</body>
+</html>

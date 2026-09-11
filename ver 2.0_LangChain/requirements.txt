@@ -1,0 +1,14 @@
+# ver4.0 依赖：在原有 sentence-transformers / chromadb / pymupdf 基础上
+# 增加 LangChain 及其官方集成包（本机已装旧版 langchain-chroma 时先升级到最新）
+langchain>=1.0
+langchain-community
+langchain-chroma>=1.0
+langchain-huggingface
+langchain-deepseek
+langchain-core
+sentence-transformers
+chromadb
+pymupdf
+fastapi
+uvicorn
+python-dotenv

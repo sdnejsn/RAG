@@ -1,0 +1,18 @@
+# ver3.0_redis 依赖 = ver2.0_LangChain 依赖 + 缓存客户端
+# 在 ver2.0_LangChain（LangChain 版）基础上，唯一新增的是 redis 客户端。
+langchain>=1.0
+langchain-community
+langchain-chroma>=1.0
+langchain-huggingface
+langchain-deepseek
+langchain-core
+sentence-transformers
+chromadb
+pymupdf
+fastapi
+uvicorn
+python-dotenv
+
+# 缓存层：Redis 客户端。
+# 不装也能跑 —— 连不上 Redis 时自动降级为进程内内存缓存（CACHE_BACKEND=auto）。
+redis>=5.0
